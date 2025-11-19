@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f0f2f5; padding: 20px; }
+        .status-New { background-color: #e3f2fd; color: #0d6efd; }
+        .status-Follow-up-Sent { background-color: #fff3cd; color: #856404; }
+        .status-Completed { background-color: #d1e7dd; color: #0f5132; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid" style="max-width: 1000px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>Job Dashboard</h3>
+        <span class="text-muted small" id="lastUpdated">Loading...</span>
+    </div>
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Date</th><th>Customer</th><th>Job</th><th>Est</th><th>Status</th><th class="text-end">Actions</th></tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadJobs() {
+        const res = await fetch('/api/get-jobs');
+        const { jobs } = await res.json();
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        jobs.forEach(job => {
+            const cls = `status-${job.status.replace(/\s+/g, '-')}`;
+            tbody.innerHTML += `
+                <tr>
+                    <td>${new Date(job.created_at).toLocaleDateString()}</td>
+                    <td><b>${job.name}</b><br><small>${job.phone}</small></td>
+                    <td>${job.job_type}</td>
+                    <td>${job.estimated_price}</td>
+                    <td><span class="badge ${cls}">${job.status}</span></td>
+                    <td class="text-end">
+                        <button onclick="setStatus(${job.id}, 'Follow-up Sent')" class="btn btn-sm btn-outline-secondary">✉️</button>
+                        <button onclick="setStatus(${job.id}, 'Completed')" class="btn btn-sm btn-success">✓</button>
+                    </td>
+                </tr>
+            `;
+        });
+        document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
+    }
+
+    async function setStatus(id, status) {
+        await fetch('/api/update-job', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id, status })
+        });
+        loadJobs();
+    }
+
+    loadJobs();
+    setInterval(loadJobs, 15000);
+</script>
+</body>
+</html>

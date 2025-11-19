@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Trade Estimate</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 20px; }
+        .container { max-width: 600px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #result { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="text-center mb-4">Request a Quote</h2>
+    
+    <form id="jobForm">
+        <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" id="name" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Phone</label>
+            <input type="tel" class="form-control" id="phone" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Job Type</label>
+            <select class="form-select" id="jobType" required>
+                <option value="" disabled selected>Select a trade...</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Electrical">Electrical</option>
+                <option value="HVAC">HVAC</option>
+                <option value="Roofing">Roofing</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="description" rows="3" required></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Photo (Optional, Max 2MB)</label>
+            <input type="file" class="form-control" id="photo" accept="image/*">
+        </div>
+        <button type="submit" class="btn btn-primary w-100" id="submitBtn">Get Estimate</button>
+    </form>
+
+    <div id="result" class="mt-4 alert alert-success">
+        <h4 class="alert-heading">Estimate Ready!</h4>
+        <p id="estimateText"></p>
+        <p id="estimatePrice" class="fw-bold"></p>
+        <div id="downloadArea"></div>
+    </div>
+</div>
+
+<script>
+    const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+
+    document.getElementById('jobForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true; btn.innerText = "Calculating...";
+
+        const fileInput = document.querySelector('#photo').files[0];
+        let photoBase64 = null;
+        if (fileInput) {
+            if(fileInput.size > 2000000) { alert("File too large"); btn.disabled=false; return; }
+            photoBase64 = await toBase64(fileInput);
+        }
+
+        const formData = {
+            name: document.getElementById('name').value,
+            phone: document.getElementById('phone').value,
+            email: document.getElementById('email').value,
+            jobType: document.getElementById('jobType').value,
+            description: document.getElementById('description').value,
+            photo: photoBase64
+        };
+
+        try {
+            const res = await fetch('/api/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const data = await res.json();
+
+            if(res.ok) {
+                document.getElementById('jobForm').style.display = 'none';
+                document.getElementById('result').style.display = 'block';
+                document.getElementById('estimateText').innerText = data.description;
+                document.getElementById('estimatePrice').innerText = `Est: ${data.estimate}`;
+                
+                // Add PDF Download Button
+                const link = document.createElement('a');
+                link.href = data.pdfUrl;
+                link.download = `Quote-${data.data.id}.pdf`;
+                link.className = 'btn btn-dark w-100 mt-2';
+                link.innerText = '📄 Download Official PDF Quote';
+                document.getElementById('downloadArea').appendChild(link);
+            } else {
+                alert("Error: " + data.error);
+                btn.disabled = false;
+            }
+        } catch (err) {
+            console.error(err);
+            btn.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

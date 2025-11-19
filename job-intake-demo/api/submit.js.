@@ -1,0 +1,53 @@
+import { createClient } from '@supabase/supabase-js';
+import PDFDocument from 'pdfkit';
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { name, phone, email, jobType, description, photo } = req.body;
+
+  // 1. Estimate Logic
+  let estimate = "Contact for pricing";
+  let workDesc = "General consultation";
+  if(jobType === 'Plumbing') { estimate = "$150 - $350"; workDesc = "Leak detection & repair"; }
+  if(jobType === 'Electrical') { estimate = "$200 - $400"; workDesc = "Diagnostics & wiring"; }
+  if(jobType === 'HVAC') { estimate = "$120 + Parts"; workDesc = "System maintenance"; }
+  if(jobType === 'Roofing') { estimate = "$500+"; workDesc = "Patch estimate"; }
+
+  try {
+    // 2. Save to Supabase
+    const { data, error } = await supabase.from('jobs').insert([{
+      name, phone, email, job_type: jobType, description, 
+      photo_base64: photo, estimated_price: estimate, estimate_summary: workDesc, status: 'New'
+    }]).select();
+
+    if (error) throw error;
+    const job = data[0];
+
+    // 3. Generate PDF (In-Memory)
+    const pdfBase64 = await new Promise((resolve) => {
+        const doc = new PDFDocument();
+        let buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers).toString('base64')));
+        
+        doc.fontSize(20).text('OFFICIAL QUOTE', { align: 'center' }).moveDown();
+        doc.fontSize(12).text(`ID: #${job.id} | Date: ${new Date().toLocaleDateString()}`);
+        doc.text(`Customer: ${name} | Type: ${jobType}`).moveDown();
+        doc.text(`Estimate: ${estimate}`, { align: 'right', bold: true });
+        doc.end();
+    });
+    const pdfUrl = `data:application/pdf;base64,${pdfBase64}`;
+
+    // 4. Mock Logs
+    console.log(`[SMS OWNER] New Job #${job.id} from ${name}: ${estimate}`);
+    console.log(`[EMAIL CUSTOMER] Sent quote PDF to ${email}`);
+
+    res.status(200).json({ success: true, estimate, description: workDesc, pdfUrl, data: job });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
